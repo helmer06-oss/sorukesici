@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tolga Aydos - PDF Cutter Pro</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-bg: #121214;
+            --sidebar-bg: #1c1c1f;
+            --accent-color: #00f2ff; /* Neon Mavi */
+            --accent-glow: rgba(0, 242, 255, 0.4);
+            --text-color: #e1e1e6;
+            --border-color: #2d2d35;
+            --success-color: #00ff88;
+        }
+
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            display: flex; 
+            height: 100vh; 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: var(--primary-bg); 
+            color: var(--text-color);
+        }
+        
+        /* --- SOL PANEL (SIDEBAR) --- */
+        #sidebar { 
+            width: 340px; 
+            background: var(--sidebar-bg); 
+            padding: 25px; 
+            display: flex; 
+            flex-direction: column; 
+            border-right: 1px solid var(--border-color); 
+            box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        .brand-header {
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+        .brand-header h2 { margin: 0; font-weight: 600; color: white; letter-spacing: 1px; }
+        .brand-header span { font-size: 0.8em; color: var(--accent-color); text-transform: uppercase; letter-spacing: 2px; }
+
+        /* --- SAĞ PANEL (WORKSPACE) --- */
+        #workspace { 
+            flex: 1; 
+            position: relative; 
+            overflow: auto; 
+            display: flex; 
+            justify-content: center; 
+            padding: 50px; 
+            background-image: radial-gradient(#2d2d35 1px, transparent 1px);
+            background-size: 20px 20px; /* Noktalı teknik zemin */
+        }
+
+        #canvas-wrapper {
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.7);
+            background: #fff;
+            align-self: flex-start; 
+            border: 2px solid #333;
+        }
+
+        canvas#pdf-render { display: block; cursor: crosshair; }
+
+        /* --- SEÇİM KUTULARI (NEON STYLE) --- */
+        .selection-box {
+            position: absolute;
+            border: 2px solid var(--accent-color);
+            background-color: rgba(0, 242, 255, 0.1);
+            box-shadow: 0 0 10px var(--accent-color), inset 0 0 10px var(--accent-glow);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .saved-box {
+            position: absolute;
+            border: 2px solid var(--success-color);
+            background-color: rgba(0, 255, 136, 0.2);
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 0 0 4px black;
+            box-shadow: 0 0 5px var(--success-color);
+        }
+
+        /* --- FORM ELEMANLARI --- */
+        .control-group { margin-bottom: 20px; }
+        label { font-size: 0.85em; color: #888; margin-bottom: 8px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        input[type="text"], input[type="file"] { 
+            width: 100%; 
+            padding: 12px; 
+            background: #2a2a30; 
+            border: 1px solid var(--border-color); 
+            border-radius: 6px; 
+            color: white; 
+            box-sizing: border-box; 
+            font-family: 'Poppins', sans-serif;
+            transition: 0.3s;
+        }
+        input:focus { border-color: var(--accent-color); outline: none; box-shadow: 0 0 8px var(--accent-glow); }
+
+        /* --- BUTONLAR --- */
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: linear-gradient(45deg, #007bff, #0056b3); 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: 600; 
+            margin-bottom: 8px; 
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4); }
+        
+        button.success { 
+            background: linear-gradient(45deg, var(--success-color), #00b862); 
+            color: #000;
+            margin-top: 10px; 
+            font-size: 1em; 
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+        }
+        button.success:hover { box-shadow: 0 0 25px rgba(0, 255, 136, 0.6); }
+
+        button.secondary { background: #333; color: #ccc; }
+        button.secondary:hover { background: #444; color: white; }
+        
+        button.nav-btn { width: 48%; display: inline-block; font-size: 0.75em; }
+
+        /* --- LİSTE --- */
+        #q-list { 
+            list-style: none; 
+            padding: 0; 
+            margin-top: 10px; 
+            overflow-y: auto; 
+            flex: 1; /* Listeyi uzatır */
+            border-top: 1px solid var(--border-color);
+        }
+        .q-item { 
+            padding: 10px; 
+            border-bottom: 1px solid var(--border-color); 
+            cursor: pointer; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 0.9em;
+            transition: 0.2s;
+        }
+        .q-item:hover { background: rgba(255,255,255,0.05); }
+        .q-item.active { 
+            background: rgba(0, 242, 255, 0.1); 
+            color: var(--accent-color); 
+            border-left: 3px solid var(--accent-color); 
+        }
+        .q-item.done { color: var(--success-color); text-decoration: line-through; opacity: 0.5; }
+
+        /* --- FOOTER & DURUM --- */
+        #status-msg { margin: 10px 0; font-size: 0.85em; color: var(--accent-color); font-weight: 500; min-height: 20px; }
+        
+        .footer-credit {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 0.75em;
+            color: #666;
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+        }
+        .footer-credit a { color: var(--accent-color); text-decoration: none; font-weight: bold; }
+
+        #pdf-controls { display: none; margin-bottom: 15px; background: #2a2a30; padding: 10px; border-radius: 5px; text-align: center; border: 1px solid var(--border-color); }
+        
+        /* Scrollbar Style */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1c1c1f; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="brand-header">
+        <h2>SORU KESİCİ</h2>
+        <span>Pro Studio</span>
+    </div>
+
+    <div class="control-group">
+        <label>1. Dosya Yükle</label>
+        <input type="file" id="fileInput" accept="application/pdf, image/*">
+    </div>
+
+    <div id="pdf-controls">
+        <label style="margin:0; margin-bottom:5px; color:white;">Sayfa <span id="page-num" style="color:var(--accent-color)">1</span> / <span id="page-count">--</span></label>
+        <div style="display:flex; justify-content:space-between; margin-top:5px;">
+            <button class="nav-btn secondary" id="prev-page">❮ Geri</button>
+            <button class="nav-btn secondary" id="next-page">İleri ❯</button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <label>2. Cevap Anahtarı</label>
+        <input type="text" id="answerKey" placeholder="1A 2B 3C..." value="">
+    </div>
+
+    <button onclick="initSession()">🚀 Başlat / Sıfırla</button>
+    <button onclick="undoLast()" style="background:#d63031;">↩️ Geri Al</button>
+
+    <div id="status-msg">Hazır. Dosya yükleyin.</div>
+
+    <ul id="q-list"></ul>
+
+    <button class="success" onclick="downloadZip()">💾 ZIP İNDİR</button>
+
+    <div class="footer-credit">
+        Designed & Developed by <br>
+        <a href="https://tolgaaydos.com" target="_blank">tolgaaydos.com</a>
+    </div>
+</div>
+
+<div id="workspace">
+    <div id="canvas-wrapper">
+        <canvas id="pdf-render"></canvas>
+    </div>
+</div>
+
+<script>
+    // PDF.js worker ayarı
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pdfDoc = null;
+    let pageNum = 1;
+    let scale = 1.5; 
+    let canvas = document.getElementById('pdf-render');
+    let ctx = canvas.getContext('2d');
+    let wrapper = document.getElementById('canvas-wrapper');
+
+    let questions = []; 
+    let currentIndex = 0;
+    
+    let isDrawing = false;
+    let startX, startY;
+    let activeBox = null;
+
+    // --- DOSYA YÜKLEME ---
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        let file = e.target.files[0];
+        if(!file) return;
+
+        if(file.type === 'application/pdf') {
+            document.getElementById('pdf-controls').style.display = 'block';
+            let fileReader = new FileReader();
+            fileReader.onload = function() {
+                let typedarray = new Uint8Array(this.result);
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    pdfDoc = pdf;
+                    document.getElementById('page-count').textContent = pdf.numPages;
+                    renderPage(pageNum);
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        } else {
+            document.getElementById('pdf-controls').style.display = 'none';
+            let img = new Image();
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+            }
+            img.src = URL.createObjectURL(file);
+        }
+    });
+
+    function renderPage(num) {
+        if(!pdfDoc) return;
+        pdfDoc.getPage(num).then(function(page) {
+            let viewport = page.getViewport({scale: scale});
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            let renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            page.render(renderContext);
+        });
+        document.getElementById('page-num').textContent = num;
+        document.querySelectorAll('.saved-box').forEach(e => e.remove());
+    }
+
+    document.getElementById('prev-page').addEventListener('click', () => {
+        if(pageNum <= 1) return;
+        pageNum--;
+        renderPage(pageNum);
+    });
+    document.getElementById('next-page').addEventListener('click', () => {
+        if(pageNum >= pdfDoc.numPages) return;
+        pageNum++;
+        renderPage(pageNum);
+    });
+
+    // --- SORU LİSTESİ ---
+    function initSession() {
+        const input = document.getElementById('answerKey').value.trim();
+        if(!input) { alert("Cevap anahtarı girin!"); return; }
+        
+        const keys = input.split(/\s+/);
+        questions = keys.map(k => ({ name: k, box: null, imageBlob: null }));
+        currentIndex = 0;
+        updateListUI();
+        document.getElementById('status-msg').innerText = "1. soruyu seçin...";
+        
+        document.querySelectorAll('.saved-box').forEach(e => e.remove());
+    }
+
+    function updateListUI() {
+        const list = document.getElementById('q-list');
+        list.innerHTML = "";
+        questions.forEach((q, i) => {
+            let li = document.createElement('li');
+            li.className = `q-item ${i === currentIndex ? 'active' : ''} ${q.box ? 'done' : ''}`;
+            li.innerHTML = `<span>${i+1}. Soru <b>(${q.name})</b></span> <span>${q.box ? '✅' : '○'}</span>`;
+            list.appendChild(li);
+        });
+        
+        if(currentIndex < questions.length) {
+            document.getElementById('status-msg').innerText = `Sıradaki: ${questions[currentIndex].name}`;
+        } else {
+            document.getElementById('status-msg').innerText = "Tümü tamamlandı! İndirilebilir.";
+        }
+        
+        // Listeyi aktif soruya kaydır
+        const activeItem = document.querySelector('.q-item.active');
+        if(activeItem) activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // --- ÇİZİM İŞLEMİ ---
+    wrapper.addEventListener('mousedown', (e) => {
+        if(currentIndex >= questions.length) return;
+        
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        startX = e.clientX - rect.left;
+        startY = e.clientY - rect.top;
+
+        activeBox = document.createElement('div');
+        activeBox.className = 'selection-box';
+        activeBox.style.left = startX + 'px';
+        activeBox.style.top = startY + 'px';
+        wrapper.appendChild(activeBox);
+    });
+
+    wrapper.addEventListener('mousemove', (e) => {
+        if(!isDrawing) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
+
+        const width = currentX - startX;
+        const height = currentY - startY;
+
+        activeBox.style.width = Math.abs(width) + 'px';
+        activeBox.style.height = Math.abs(height) + 'px';
+        activeBox.style.left = (width < 0 ? currentX : startX) + 'px';
+        activeBox.style.top = (height < 0 ? currentY : startY) + 'px';
+    });
+
+    wrapper.addEventListener('mouseup', async (e) => {
+        if(!isDrawing) return;
+        isDrawing = false;
+        
+        if(!activeBox) return;
+
+        const x = parseInt(activeBox.style.left);
+        const y = parseInt(activeBox.style.top);
+        const w = parseInt(activeBox.style.width);
+        const h = parseInt(activeBox.style.height);
+
+        if(w < 10 || h < 10) { activeBox.remove(); return; }
+
+        activeBox.className = 'saved-box';
+        activeBox.innerText = questions[currentIndex].name;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const tCtx = tempCanvas.getContext('2d');
+        
+        tCtx.drawImage(canvas, x, y, w, h, 0, 0, w, h);
+        const blob = await new Promise(r => tempCanvas.toBlob(r, 'image/jpeg', 0.95)); 
+
+        questions[currentIndex].box = {x, y, w, h};
+        questions[currentIndex].imageBlob = blob;
+
+        currentIndex++;
+        updateListUI();
+        activeBox = null;
+    });
+
+    function undoLast() {
+        if(currentIndex > 0) {
+            currentIndex--;
+            questions[currentIndex].box = null;
+            questions[currentIndex].imageBlob = null;
+            
+            let boxes = document.querySelectorAll('.saved-box');
+            if(boxes.length > 0) boxes[boxes.length-1].remove();
+            
+            updateListUI();
+        }
+    }
+
+    function downloadZip() {
+        let zip = new JSZip();
+        let count = 0;
+        
+        questions.forEach(q => {
+            if(q.imageBlob) {
+                zip.file(q.name + ".jpg", q.imageBlob);
+                count++;
+            }
+        });
+
+        if(count === 0) { alert("Hiç soru seçilmedi!"); return; }
+
+        zip.generateAsync({type:"blob"}).then(function(content) {
+            saveAs(content, "tolgaaydos_sorular.zip");
+        });
+    }
+</script>
+
+</body>
+</html>
